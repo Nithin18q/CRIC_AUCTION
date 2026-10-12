@@ -27,9 +27,11 @@ import {
   Sparkles,
   Info,
   X,
-  Eye
+  Eye,
+  Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getTargetPlayers, isTargetsConfirmed } from '../lib/targetPlayersStorage';
 
 import { TEAMS } from '../data/teams';
 import TextChat from '../components/TextChat';
@@ -82,11 +84,16 @@ const Lobby = () => {
 
   useEffect(() => {
     if (currentAuction?.status === 'active') {
-      navigate(`/auction/${id}`, { replace: true });
+      const confirmed = isTargetsConfirmed(id, user?.uid);
+      if (confirmed) {
+        navigate(`/auction/${id}`, { replace: true });
+      } else {
+        navigate(`/targets/${id}`, { replace: true });
+      }
     } else if (currentAuction?.status === 'completed') {
       navigate(`/summary/${id}`, { replace: true });
     }
-  }, [currentAuction?.status, id, navigate]);
+  }, [currentAuction?.status, id, navigate, user?.uid]);
 
   useEffect(() => {
     if (currentAuction && user) {
@@ -105,7 +112,12 @@ const Lobby = () => {
       setIsStarting(true);
       try {
         await startAuction(id);
-        navigate(`/auction/${id}`);
+        const confirmed = isTargetsConfirmed(id, user?.uid);
+        if (confirmed) {
+          navigate(`/auction/${id}`);
+        } else {
+          navigate(`/targets/${id}`);
+        }
       } catch (error) {
         setIsStarting(false);
       }
@@ -441,29 +453,40 @@ const Lobby = () => {
           )}
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => fillEmptyTeamsWithBots(id)}
-              className="px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-              title="Add AI Bots to unassigned franchises"
-            >
-              <Zap size={14} className="text-orange-400" />
-              <span>Fill Bots</span>
-            </button>
-            <button
-              onClick={handleStartAuction}
-              disabled={isStarting}
-              className="relative overflow-hidden group px-4 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-[#ff5500] to-[#ff8c00] rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest shadow-[0_10px_30px_rgba(255,85,0,0.3)] disabled:opacity-50 transition-all active:scale-95 cursor-pointer shrink-0"
-            >
-              <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-              <div className="relative flex items-center gap-1.5 sm:gap-2">
-                {isStarting && <Loader2 size={16} className="animate-spin" />}
-                <span>{isStarting ? 'Igniting...' : 'Start Auction'}</span>
-              </div>
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(`/targets/${id}`)}
+            className="px-3.5 py-2.5 sm:py-3 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            title="Configure Target Players & Planned Ceiling Bids"
+          >
+            <Target size={14} className="text-orange-400" />
+            <span>Target Players {getTargetPlayers(id, user?.uid).length > 0 ? `(${getTargetPlayers(id, user?.uid).length}/5)` : ''}</span>
+          </button>
+
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => fillEmptyTeamsWithBots(id)}
+                className="px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                title="Add AI Bots to unassigned franchises"
+              >
+                <Zap size={14} className="text-orange-400" />
+                <span>Fill Bots</span>
+              </button>
+              <button
+                onClick={handleStartAuction}
+                disabled={isStarting}
+                className="relative overflow-hidden group px-4 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-[#ff5500] to-[#ff8c00] rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest shadow-[0_10px_30px_rgba(255,85,0,0.3)] disabled:opacity-50 transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                <div className="relative flex items-center gap-1.5 sm:gap-2">
+                  {isStarting && <Loader2 size={16} className="animate-spin" />}
+                  <span>{isStarting ? 'Igniting...' : 'Start Auction'}</span>
+                </div>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <motion.div
@@ -566,6 +589,39 @@ const Lobby = () => {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="w-full h-px bg-white/5" />
+
+            {/* Target Strategy Hub */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Target Strategy</h3>
+                </div>
+                <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded uppercase tracking-wider">
+                  {getTargetPlayers(id, user?.uid).length}/5 Selected
+                </span>
+              </div>
+              <div className="p-3.5 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-[11px] font-black text-white uppercase block leading-tight">
+                    {getTargetPlayers(id, user?.uid).length > 0 ? `${getTargetPlayers(id, user?.uid).length} Targets Configured` : 'No Targets Set Yet'}
+                  </span>
+                  <span className="text-[9px] text-gray-400 block mt-0.5">
+                    {getTargetPlayers(id, user?.uid).length > 0
+                      ? 'Live amber & red bid alerts active in room'
+                      : 'Pick up to 5 targets with maximum ceiling bids'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => navigate(`/targets/${id}`)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-black font-black text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shrink-0 shadow-md shadow-orange-500/20"
+                >
+                  {getTargetPlayers(id, user?.uid).length > 0 ? 'Edit' : 'Configure'}
+                </button>
               </div>
             </div>
 
