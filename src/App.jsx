@@ -11,6 +11,7 @@ import './index.css'
 const AuctionRoom     = lazy(() => import('./pages/AuctionRoom'))
 const AuctionSummary  = lazy(() => import('./pages/AuctionSummary'))
 const Lobby           = lazy(() => import('./pages/Lobby'))
+const TargetPlayers   = lazy(() => import('./pages/TargetPlayers'))
 const GameGuide       = lazy(() => import('./pages/GameGuide'))
 const PrivacyPolicy   = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsConditions = lazy(() => import('./pages/TermsConditions'))
@@ -66,6 +67,9 @@ function App() {
                 } />
                 <Route path="/lobby/:id" element={
                   <Suspense fallback={<PageFallback />}><Lobby /></Suspense>
+                } />
+                <Route path="/targets/:id" element={
+                  <Suspense fallback={<PageFallback />}><TargetPlayers /></Suspense>
                 } />
                 <Route path="/auction/:id" element={
                   <Suspense fallback={<PageFallback />}><AuctionRoom /></Suspense>

@@ -40,13 +40,16 @@ import {
    Trophy,
    Clock,
    LogOut,
-   Eye
+   Eye,
+   Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { TEAMS } from '../data/teams';
 import TextChat from '../components/TextChat';
 import PageLoader from '../components/PageLoader';
+import SmartBidAlert from '../components/SmartBidAlert';
+import { getTargetPlayers } from '../lib/targetPlayersStorage';
 
 const AuctionRoom = () => {
    const { id } = useParams();
@@ -89,10 +92,31 @@ const AuctionRoom = () => {
    const [joiningTeam, setJoiningTeam] = useState(null);
    const [banError, setBanError] = useState(null);
    const [isBiddingInFlight, setIsBiddingInFlight] = useState(false);
+   const [targetPlayers, setTargetPlayers] = useState(() => getTargetPlayers(id, user?.uid));
+   const [showTargetsOverlay, setShowTargetsOverlay] = useState(false);
    const [spectateMode, setSpectateMode] = useState(() => {
       const params = new URLSearchParams(window.location.search);
       return params.get('spectate') === 'true';
    });
+
+   // Re-sync targets once user auth resolves (initial render may have null uid)
+   useEffect(() => {
+      if (user?.uid) {
+         setTargetPlayers(getTargetPlayers(id, user.uid));
+      }
+   }, [id, user?.uid]);
+
+   // Listen for target updates from other tabs / storage
+   useEffect(() => {
+      const handleTargetsUpdate = (e) => {
+         // Only react to events for this room + this user
+         if (e.detail?.roomId === id && (!e.detail?.userId || e.detail.userId === user?.uid)) {
+            setTargetPlayers(getTargetPlayers(id, user?.uid));
+         }
+      };
+      window.addEventListener('cric_targets_updated', handleTargetsUpdate);
+      return () => window.removeEventListener('cric_targets_updated', handleTargetsUpdate);
+   }, [id, user?.uid]);
 
    // Clear optimistic state when DB catches up
    useEffect(() => {
@@ -157,6 +181,12 @@ const AuctionRoom = () => {
    const currentPlayer = useMemo(() => {
       return IPL_PLAYERS.find(p => p.id === displayAuctionState?.playerId) || IPL_PLAYERS[0];
    }, [displayAuctionState?.playerId]);
+
+   // Check if the current player is one of the user's selected targets
+   const currentTarget = useMemo(() => {
+      if (!currentPlayer?.id || !targetPlayers?.length) return null;
+      return targetPlayers.find(t => t.id === currentPlayer.id) || null;
+   }, [currentPlayer?.id, targetPlayers]);
 
    const [isTtsEnabled, setIsTtsEnabled] = useState(true);
    const [ttsSpeed, setTtsSpeed] = useState(1.15); // configurable pace
@@ -896,6 +926,19 @@ const AuctionRoom = () => {
                )}
                <div className="flex items-center gap-1 border-l border-white/10 pl-1.5 sm:pl-3">
                   <button
+                     onClick={() => setShowTargetsOverlay(true)}
+                     className={`p-1 sm:px-2.5 sm:py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${
+                        currentTarget
+                           ? 'bg-orange-500 text-black border-orange-400 shadow-[0_0_15px_rgba(255,85,0,0.4)] animate-pulse'
+                           : 'bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20'
+                     }`}
+                     title="Target Players & Smart Ceilings"
+                  >
+                     <Target size={13} />
+                     <span className="hidden sm:inline">Targets</span>
+                     <span className="bg-black/20 px-1 rounded text-[9px]">{targetPlayers.length}</span>
+                  </button>
+                  <button
                      onClick={() => setShowSettings(!showSettings)}
                      className={`p-1 sm:p-1.5 rounded-lg border transition-all cursor-pointer ${showSettings ? 'bg-white/10 border-white/20 text-white shadow-sm' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
                      title="Local & Room Settings"
@@ -1111,6 +1154,12 @@ const AuctionRoom = () => {
                                           <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-2 md:mb-4">
                                              <span className="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] md:text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">{currentPlayer.role}</span>
                                              <span className="bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[8px] md:text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">{currentPlayer.type}</span>
+                                             {currentTarget && (
+                                                <span className="bg-orange-500/15 border border-orange-500/40 text-orange-400 text-[8px] md:text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest flex items-center gap-1 shadow-[0_0_12px_rgba(255,85,0,0.2)]">
+                                                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                                                   Target Player (Planned Max: ₹{Number(currentTarget.maxBid || 0).toFixed(2)} Cr)
+                                                </span>
+                                             )}
                                           </div>
                                           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tight text-white leading-none">{currentPlayer.name}</h2>
                                        </div>
@@ -1225,9 +1274,19 @@ const AuctionRoom = () => {
                                        );
                                     })()}
 
-                                    <div className="flex gap-3 md:gap-4">
-                                       <button
-                                          onClick={handleBid}
+                                       {/* Live Smart Bid Alert for Targeted Player */}
+                                       {currentTarget && (
+                                          <SmartBidAlert
+                                             target={currentTarget}
+                                             currentBid={displayAuctionState?.currentBid || 0}
+                                             status={displayAuctionState?.status}
+                                             basePrice={currentPlayer.basePrice}
+                                          />
+                                       )}
+
+                                       <div className="flex gap-3 md:gap-4">
+                                          <button
+                                             onClick={handleBid}
                                           disabled={spectateMode || !team || timeLeft === 0 || displayAuctionState?.status !== 'bidding' || displayAuctionState?.highBidderId === user?.uid}
                                           className={`flex-1 h-12 sm:h-14 md:h-18 font-black text-sm sm:text-base md:text-xl rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale cursor-pointer ${spectateMode
                                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
@@ -1522,6 +1581,111 @@ const AuctionRoom = () => {
             {error && (
                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-20 md:bottom-12 bg-red-500/20 border border-red-500/50 p-4 md:p-6 rounded-3xl flex items-center gap-4 text-red-500 font-black z-[110]">
                   <AlertCircle size={16} /><span className="text-xs md:text-base">{error}</span>
+               </motion.div>
+            )}
+         </AnimatePresence>
+
+         <AnimatePresence>
+            {showTargetsOverlay && (
+               <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }} className="fixed top-16 right-3 sm:right-6 z-[100] bg-[#0c0d12]/95 border border-orange-500/30 p-5 sm:p-6 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] w-80 sm:w-96 backdrop-blur-2xl">
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                     <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400">
+                           <Target size={14} />
+                        </div>
+                        <div>
+                           <h3 className="text-xs font-black text-white uppercase tracking-wider">Target Players ({targetPlayers.length}/5)</h3>
+                           <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-none">Smart Bid Ceilings</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setShowTargetsOverlay(false)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"><X size={15} /></button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1 custom-scrollbar">
+                     {targetPlayers.length === 0 ? (
+                        <div className="text-center py-6 text-gray-500 text-xs">
+                           <p className="mb-3">No target players set for this auction session.</p>
+                           <button
+                              onClick={() => {
+                                 setShowTargetsOverlay(false);
+                                 navigate(`/targets/${id}`);
+                              }}
+                              className="px-4 py-2 rounded-xl bg-orange-500 text-black font-black text-[10px] uppercase tracking-wider cursor-pointer"
+                           >
+                              Set Targets Now
+                           </button>
+                        </div>
+                     ) : (
+                        targetPlayers.map((tp, idx) => {
+                           const isCurrent = tp.id === currentPlayer?.id;
+                           const isSoldToMe = (team?.squad || []).some(s => (typeof s === 'string' ? s : s.id) === tp.id);
+                           const soldOwner = currentAuction?.soldPlayers?.[tp.id] || roomTeams?.find(rt => (rt.squad || []).some(s => (typeof s === 'string' ? s : s.id) === tp.id));
+
+                           return (
+                              <div
+                                 key={tp.id}
+                                 className={`p-3 rounded-2xl border transition-all ${
+                                    isCurrent
+                                       ? 'bg-orange-500/15 border-orange-500/50 shadow-md shadow-orange-500/20'
+                                       : isSoldToMe
+                                       ? 'bg-green-500/10 border-green-500/30'
+                                       : 'bg-white/[0.03] border-white/10'
+                                 }`}
+                              >
+                                 <div className="flex items-center gap-3">
+                                    <img src={tp.image} alt={tp.name} className="w-10 h-10 rounded-xl object-cover bg-white/5 border border-white/10 shrink-0" />
+                                    <div className="min-w-0 flex-1">
+                                       <div className="flex items-center justify-between gap-1">
+                                          <h4 className="text-xs font-black text-white truncate">{tp.name}</h4>
+                                          <span className="text-[8px] font-black uppercase text-orange-400 shrink-0">#{idx + 1}</span>
+                                       </div>
+                                       <span className="text-[9px] text-gray-400 block truncate">{tp.role} • {tp.set}</span>
+                                    </div>
+                                 </div>
+
+                                 <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between text-[10px]">
+                                    <div>
+                                       <span className="text-gray-500 text-[8px] uppercase tracking-wider block">Planned Ceiling:</span>
+                                       <span className="font-black text-white">₹{Number(tp.maxBid || 0).toFixed(2)} Cr</span>
+                                    </div>
+                                    <div className="text-right">
+                                       {isCurrent ? (
+                                          <span className="px-2 py-0.5 rounded-full bg-orange-500 text-black text-[8px] font-black uppercase tracking-wider animate-pulse">
+                                             On Block Now
+                                          </span>
+                                       ) : isSoldToMe ? (
+                                          <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[8px] font-black uppercase tracking-wider">
+                                             Acquired
+                                          </span>
+                                       ) : soldOwner ? (
+                                          <span className="px-2 py-0.5 rounded-full bg-gray-700 text-gray-300 text-[8px] font-bold uppercase tracking-wider">
+                                             Sold
+                                          </span>
+                                       ) : (
+                                          <span className="text-gray-500 text-[8px] font-bold uppercase tracking-wider">
+                                             Upcoming
+                                          </span>
+                                       )}
+                                    </div>
+                                 </div>
+                              </div>
+                           );
+                        })
+                     )}
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-white/10 flex items-center justify-between">
+                     <button
+                        onClick={() => {
+                           setShowTargetsOverlay(false);
+                           navigate(`/targets/${id}`);
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                     >
+                        <Target size={12} className="text-orange-400" />
+                        <span>Manage in Strategy Hub</span>
+                     </button>
+                  </div>
                </motion.div>
             )}
          </AnimatePresence>
