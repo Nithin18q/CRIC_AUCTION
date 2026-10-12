@@ -126,6 +126,23 @@ To deploy your own version:
 4. Deploy the application.
 5. Configure Firebase Authentication's authorized domains for your deployed domain.
 
+
+## 🙏 Credits & Acknowledgements
+
+This project is based on the original IPL Auction project by [Shaurya01836](https://github.com/Shaurya01836).
+
+**Original project:** [Shaurya01836/ipl-auction](https://github.com/Shaurya01836/ipl-auction)
+
+The original developer created the foundation of this project. I have extended and customized it with additional features, including:
+
+- **Team Rankings** — ranking teams based on their auction squads.
+- **Target Players** — selecting preferred players and setting planned bid limits.
+- **Smart Bid Alerts** — alerting users when bids approach or exceed their planned limits.
+
+Thank you to the original developer for the work and inspiration behind this project.
+
+**My modified version:** [Nithin18q/CRIC_AUCTION](https://github.com/Nithin18q/CRIC_AUCTION)
+
 ## 📁 Project Structure
 
 ```text
